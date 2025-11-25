@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: crypto-signal-ai-analyst
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run preview
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+    buildFilter:
+      paths:
+        - package.json
+        - package-lock.json
+        - vite.config.ts
+        - tsconfig.json
+        - src/**/*
+n        - public/**/*
