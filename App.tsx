@@ -6,6 +6,7 @@ import { SignalData, RankedSignal, MarketSummary } from './types';
 import AIInsight from './components/AIInsight';
 import SignalRow from './components/SignalRow';
 import SignalCard from './components/SignalCard';
+import ScanningControls from './components/ScanningControls';
 
 const LOWER_TIMEFRAMES = ['1m', '5m', '15m', '30m'];
 const HIGHER_TIMEFRAMES = ['1h', '4h', '1d', '1w'];
@@ -18,6 +19,10 @@ const App: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [analyzingAi, setAnalyzingAi] = useState(false);
+  const [previousSignals, setPreviousSignals] = useState<RankedSignal[]>([]);
+  const [scanInterval, setScanInterval] = useState(15 * 60 * 1000); // 15 mins default
+  const [marketVolatility, setMarketVolatility] = useState<number>(0);
+  const [confidenceRatio, setConfidenceRatio] = useState<number>(0);
 
   // Helper logic for signal aggregation (ported from original)
   const getSignalDirection = (data: SignalData, timeframes: string[]) => {
@@ -88,65 +93,127 @@ const App: React.FC = () => {
     return null;
   };
 
+  // Intelligent scanning functions
+  const calculateOptimalScanInterval = (signals: RankedSignal[]): number => {
+    const highConfidenceSignals = signals.filter(s => s.rank === 'A+').length;
+    const totalSignals = signals.length;
+    const confidence = highConfidenceSignals / totalSignals;
+    setConfidenceRatio(confidence);
+    
+    // More frequent scanning when market is decisive (high confidence signals)
+    if (confidence > 0.3) return 5 * 60 * 1000; // 5 mins
+    if (confidence > 0.15) return 10 * 60 * 1000; // 10 mins
+    return 15 * 60 * 1000; // 15 mins for choppy markets
+  };
+
+  const analyzeMarketVolatility = (signals: RankedSignal[]): number => {
+    const buySignals = signals.filter(s => s.signal.includes('BUY')).length;
+    const sellSignals = signals.filter(s => s.signal.includes('SELL')).length;
+    const totalSignals = signals.length;
+    
+    // High volatility = big difference between buy/sell signals
+    const volatility = Math.abs(buySignals - sellSignals) / totalSignals;
+    setMarketVolatility(volatility);
+    return volatility;
+  };
+
+  const detectSignificantChanges = (current: RankedSignal[], previous: RankedSignal[]): boolean => {
+    if (previous.length === 0) return false;
+    
+    const significantChanges = current.filter(currentSignal => {
+      const previousSignal = previous.find(p => p.symbol === currentSignal.symbol);
+      if (!previousSignal) return false;
+      
+      // Detect rank upgrades/downgrades
+      const rankChanged = currentSignal.rank !== previousSignal.rank;
+      const signalFlipped = (currentSignal.signal.includes('BUY') && previousSignal.signal.includes('SELL')) ||
+                            (currentSignal.signal.includes('SELL') && previousSignal.signal.includes('BUY'));
+      
+      return rankChanged || signalFlipped;
+    });
+    
+    return significantChanges.length > 3; // Trigger rescan if 3+ major changes
+  };
+
   const runScanner = useCallback(async () => {
     setScanning(true);
     setAiAnalysis(null); // Reset AI when new data comes in
     
     const symbols = await fetchAllUsdtSymbols();
-    setProgress({ current: 0, total: symbols.length, symbol: 'Starting...' });
+    setProgress({ current: 0, total: symbols.length, symbol: 'Initializing scanner...' });
 
     const newRankedSignals: RankedSignal[] = [];
 
-    // Process sequentially to respect rate limits roughly, but in chunks could be better.
-    // Given the small list in binanceService, parallel for a few is okay.
-    // We will do batches of 2.
-    const BATCH_SIZE = 2;
-    
-    for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
-        const batch = symbols.slice(i, i + BATCH_SIZE);
-        
-        await Promise.all(batch.map(async (symbol) => {
-            // Update progress for UI (approximate)
-            setProgress(prev => ({ ...prev, current: i + 1, symbol }));
+    // Process all symbols sequentially with proper rate limiting
+    // This matches the SAMPLE.txt approach for handling 503+ coins
+    for (let i = 0; i < symbols.length; i++) {
+      const symbol = symbols[i];
+      const progress = ((i + 1) / symbols.length) * 100;
+      
+      setProgress({ current: i + 1, total: symbols.length, symbol });
 
-            const signalData: SignalData = {};
-            
-            // Fetch all timeframes
-            const klinePromises = ALL_TIMEFRAMES.map(tf => fetchKlineData(symbol, tf, 100)); // Limit 100 is enough for indicators
-            const klineResults = await Promise.all(klinePromises);
+      const signalData: SignalData = {};
+      
+      // Conservative delay to prevent rate limiting (250ms like SAMPLE.txt)
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
 
-            klineResults.forEach((kline, index) => {
-                const tf = ALL_TIMEFRAMES[index];
-                if (kline && kline.length >= 50) {
-                    signalData[tf] = { signal: getTechnicalSignal(kline) };
-                } else {
-                    signalData[tf] = { signal: 'NEUTRAL' };
-                }
-            });
+      try {
+        // Fetch all timeframes
+        const klinePromises = ALL_TIMEFRAMES.map(tf => fetchKlineData(symbol, tf, 100));
+        const klineResults = await Promise.all(klinePromises);
 
-            const rank = rankSignalData(symbol, signalData);
-            if (rank) {
-                newRankedSignals.push(rank);
-            }
-        }));
-        
-        // Small delay between batches
-        await new Promise(r => setTimeout(r, 200));
+        klineResults.forEach((kline, index) => {
+          const tf = ALL_TIMEFRAMES[index];
+          if (kline && kline.length >= 50) {
+            signalData[tf] = { signal: getTechnicalSignal(kline) };
+          } else {
+            signalData[tf] = { signal: 'NEUTRAL' };
+          }
+        });
+
+        const rank = rankSignalData(symbol, signalData);
+        if (rank) {
+          newRankedSignals.push(rank);
+        }
+      } catch (error) {
+        console.warn(`Failed to process ${symbol}:`, error);
+        // Continue with next symbol if one fails
+        continue;
+      }
     }
 
     // Sort: A+ first, then A, then B+
     const rankOrder = { 'A+': 1, 'A': 2, 'B+': 3 };
     newRankedSignals.sort((a, b) => {
-        if (rankOrder[a.rank] !== rankOrder[b.rank]) {
-            return rankOrder[a.rank] - rankOrder[b.rank];
-        }
-        return a.symbol.localeCompare(b.symbol);
+      if (rankOrder[a.rank] !== rankOrder[b.rank]) {
+        return rankOrder[a.rank] - rankOrder[b.rank];
+      }
+      return a.symbol.localeCompare(b.symbol);
     });
 
+    // Intelligent scanning logic
+    const volatility = analyzeMarketVolatility(newRankedSignals);
+    const newInterval = calculateOptimalScanInterval(newRankedSignals);
+    
+    // Check for significant changes and trigger immediate rescan if needed
+    if (detectSignificantChanges(newRankedSignals, previousSignals)) {
+      console.log('Significant market changes detected - scheduling immediate rescan');
+      setTimeout(() => runScanner(), 2 * 60 * 1000); // Rescan in 2 minutes
+    }
+    
+    // Update scan interval based on market conditions
+    if (newInterval !== scanInterval) {
+      console.log(`Adjusting scan interval to ${newInterval / 1000 / 60} minutes based on market conditions`);
+      setScanInterval(newInterval);
+    }
+
+    setPreviousSignals(newRankedSignals);
     setRankedSignals(newRankedSignals);
     setLastUpdated(new Date());
     setScanning(false);
-  }, []);
+  }, [previousSignals, scanInterval]);
 
   const handleAiAnalysis = async () => {
     if (rankedSignals.length === 0) return;
@@ -176,9 +243,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     runScanner();
-    const interval = setInterval(runScanner, 15 * 60 * 1000); // 15 mins
+    const interval = setInterval(runScanner, scanInterval);
+    console.log(`Auto-scanning interval set to ${scanInterval / 1000 / 60} minutes`);
     return () => clearInterval(interval);
-  }, [runScanner]);
+  }, [runScanner, scanInterval]);
 
   return (
     <div className="min-h-screen bg-[#131722] text-[#d1d4dc] font-sans">
@@ -198,6 +266,15 @@ const App: React.FC = () => {
             analysis={aiAnalysis} 
             isLoading={analyzingAi} 
             onGenerate={handleAiAnalysis} 
+        />
+
+        {/* Smart Scanning Controls */}
+        <ScanningControls
+            currentInterval={scanInterval}
+            onIntervalChange={setScanInterval}
+            marketVolatility={marketVolatility}
+            confidenceRatio={confidenceRatio}
+            isScanning={scanning}
         />
 
         {/* Main Card */}

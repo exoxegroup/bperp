@@ -8,29 +8,49 @@ export const analyzeMarket = async (summary: MarketSummary): Promise<string> => 
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  const prompt = `
-    You are a professional Senior Crypto Market Analyst.
-    
-    Analyze the following aggregation of technical signals from a futures scanner:
-    - Total Bullish Signals: ${summary.bullishCount}
-    - Total Bearish Signals: ${summary.bearishCount}
-    - Total Neutral Signals: ${summary.neutralCount}
-    
-    Top High-Confidence Setups (Ranked A+ or A):
-    ${summary.topSetups.map(s => `- ${s.symbol}: ${s.signal} (Rank: ${s.rank})`).join('\n')}
-    
-    Task:
-    1. Determine the overall market sentiment (Bullish, Bearish, or Choppy/Neutral).
-    2. Provide a strategic recommendation for a trader (e.g., "Look for long entries on pullbacks", "Stay in cash", "Short rallies").
-    3. Specifically mention the best 1-2 symbols from the setups list and why they might be interesting based on the "A+" rank implying multi-timeframe confluence.
-    
-    Keep the response concise (under 150 words), professional, and actionable. Do not use financial advice disclaimers; assume this is for educational simulation.
+  const totalSignals = summary.bullishCount + summary.bearishCount + summary.neutralCount;
+  const bullishPercentage = ((summary.bullishCount / totalSignals) * 100).toFixed(1);
+  const bearishPercentage = ((summary.bearishCount / totalSignals) * 100).toFixed(1);
+  const neutralPercentage = ((summary.neutralCount / totalSignals) * 100).toFixed(1);
+  
+  const aPlusSignals = summary.topSetups.filter(s => s.rank === 'A+').length;
+  const highConfidencePercentage = ((aPlusSignals / totalSignals) * 100).toFixed(1);
+
+  const enhancedPrompt = `
+You are a Senior Crypto Market Analyst with 10+ years experience analyzing futures markets.
+
+Market Data Analysis:
+• Bullish Signals: ${summary.bullishCount} (${bullishPercentage}%)
+• Bearish Signals: ${summary.bearishCount} (${bearishPercentage}%)
+• Neutral Signals: ${summary.neutralCount} (${neutralPercentage}%)
+• High-Confidence (A+ Rank): ${aPlusSignals} (${highConfidencePercentage}%)
+
+Market Context:
+${summary.bullishCount > summary.bearishCount ? `📈 Bullish dominance at ${bullishPercentage}%` : summary.bearishCount > summary.bullishCount ? `📉 Bearish dominance at ${bearishPercentage}%` : `⚖️ Balanced market with ${neutralPercentage}% neutral`}
+
+Top High-Confidence Setups (A+ Rank - Multi-Timeframe Confluence):
+${summary.topSetups.filter(s => s.rank === 'A+').slice(0, 3).map(s => `• ${s.symbol}: ${s.signal} (MTF alignment confirmed)`).join('\n')}
+
+Analysis Framework:
+1. **Market Sentiment**: Determine if we're in bull/bear/choppy market
+2. **Risk Assessment**: ${highConfidencePercentage}% high-confidence signals indicates ${parseFloat(highConfidencePercentage) > 20 ? 'high' : parseFloat(highConfidencePercentage) > 10 ? 'moderate' : 'low'} conviction environment  
+3. **Trading Strategy**: Specific actionable advice for next 4-8 hours
+4. **Key Levels**: Mention strongest setups and why they're compelling
+5. **Market Timing**: Is this optimal entry or wait for better setup?
+
+Format: 3-4 concise bullet points, max 120 words, professional tone. Include percentage context.
+
+Example format:
+• Market Sentiment: [Bullish/Bearish/Neutral] (${bullishPercentage}% vs ${bearishPercentage}%)
+• Strategy: [Specific action with timeframe]
+• Best Setup: [Top A+ symbol] showing [reason]
+• Risk Level: [High/Med/Low] based on ${highConfidencePercentage}% A+ signals
   `;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
+      contents: enhancedPrompt,
     });
     
     return response.text || "Unable to generate analysis at this time.";

@@ -11,14 +11,14 @@ export async function fetchAllUsdtSymbols(): Promise<string[]> {
       .filter((s: any) => s.contractType === 'PERPETUAL' && s.quoteAsset === 'USDT' && s.status === 'TRADING')
       .map((s: any) => s.symbol);
       
-    // Return top 20 for performance in this demo env, 
-    // or user can implement a robust queue system for all symbols.
-    // For now, let's pick a diverse set of popular ones to ensure rate limits aren't hit immediately.
-    const priorityList = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'TRXUSDT', 'DOTUSDT'];
-    return priorityList; 
+    // Return all available USDT perpetual symbols (503+ coins)
+    // This matches the functionality of the SAMPLE.txt file
+    console.log(`Found ${symbols.length} USDT perpetual symbols`);
+    return symbols;
   } catch (error) {
     console.error("Failed to fetch symbols:", error);
-    return ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+    // Fallback to a comprehensive list if API fails
+    return ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'TRXUSDT', 'DOTUSDT'];
   }
 }
 
