@@ -36,8 +36,11 @@ const App: React.FC = () => {
       if (!response.ok) throw new Error('Scan failed');
       
       const data = await response.json();
-      const newRankedSignals: RankedSignal[] = data.results || [];
-      const newMarketSummary: MarketSummary = data.marketSummary || {
+      console.log('Scan data received:', data);
+
+      // Map the response correctly from server's MarketSummary format
+      const newRankedSignals: RankedSignal[] = data.topSetups || [];
+      const newMarketSummary: MarketSummary = data || {
           bullishCount: 0, bearishCount: 0, neutralCount: 0, topSetups: []
       };
 
