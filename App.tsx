@@ -5,7 +5,8 @@ import { MarketStatusHeader } from './components/features/MarketStatusHeader';
 import { SignalGrid } from './components/features/SignalGrid';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+// Use relative URL for production (same origin) or localhost for dev
+const API_BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:3000/api';
 
 const App: React.FC = () => {
   const { cachedData, saveToStorage } = useLocalStorage();
