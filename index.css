@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-color: #131722;
+  --card-bg-color: #1e222d;
+  --text-color: #d1d4dc;
+  --text-secondary-color: #8a91a0;
+  --primary-color: #2962ff;
+  --primary-hover-color: #0039cb;
+  --accent-green: #26a69a;
+  --accent-red: #ef5350;
+  --accent-neutral: #ffc107;
+  --border-color: #2a2e39;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Inter', sans-serif;
+}
