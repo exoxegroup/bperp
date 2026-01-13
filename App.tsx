@@ -19,6 +19,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Hydrate from local storage
+  // Client-side scanning implementation
   useEffect(() => {
     if (cachedData) {
       setRankedSignals(cachedData.data.signals);
