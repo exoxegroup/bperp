@@ -15,7 +15,7 @@ const AIInsight: React.FC<AIInsightProps> = ({ analysis, isLoading, onGenerate }
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
         <div>
           <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-            <i className="fas fa-robot mr-2"></i>Gemini AI Analyst
+            <i className="fas fa-robot mr-2"></i>AI Market Analyst
           </h2>
           <p className="text-gray-400 text-sm mt-1">
             Get intelligent market direction based on signal confluence.

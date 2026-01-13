@@ -1,22 +1,23 @@
-import { GoogleGenAI } from "@google/genai";
-import { MarketSummary } from '../types';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import type { MarketSummary } from '../types.js';
 
-export const analyzeMarket = async (summary: MarketSummary): Promise<string> => {
-  if (!process.env.API_KEY) {
-    return "API Key not found. Please ensure process.env.API_KEY is set.";
+export const analyzeMarketWithGemini = async (summary: MarketSummary): Promise<string> => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return "Gemini API Key is missing. Please check your environment variables.";
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
   const totalSignals = summary.bullishCount + summary.bearishCount + summary.neutralCount;
-  const bullishPercentage = ((summary.bullishCount / totalSignals) * 100).toFixed(1);
-  const bearishPercentage = ((summary.bearishCount / totalSignals) * 100).toFixed(1);
-  const neutralPercentage = ((summary.neutralCount / totalSignals) * 100).toFixed(1);
+  const safeTotal = totalSignals === 0 ? 1 : totalSignals;
+
+  const bullishPercentage = ((summary.bullishCount / safeTotal) * 100).toFixed(1);
+  const bearishPercentage = ((summary.bearishCount / safeTotal) * 100).toFixed(1);
+  const neutralPercentage = ((summary.neutralCount / safeTotal) * 100).toFixed(1);
   
   const aPlusSignals = summary.topSetups.filter(s => s.rank === 'A+').length;
-  const highConfidencePercentage = ((aPlusSignals / totalSignals) * 100).toFixed(1);
+  const highConfidencePercentage = ((aPlusSignals / safeTotal) * 100).toFixed(1);
 
-  const enhancedPrompt = `
+  const prompt = `
 You are a Senior Crypto Market Analyst with 10+ years experience analyzing futures markets.
 
 Market Data Analysis:
@@ -39,23 +40,17 @@ Analysis Framework:
 5. **Market Timing**: Is this optimal entry or wait for better setup?
 
 Format: 3-4 concise bullet points, max 120 words, professional tone. Include percentage context.
-
-Example format:
-• Market Sentiment: [Bullish/Bearish/Neutral] (${bullishPercentage}% vs ${bearishPercentage}%)
-• Strategy: [Specific action with timeframe]
-• Best Setup: [Top A+ symbol] showing [reason]
-• Risk Level: [High/Med/Low] based on ${highConfidencePercentage}% A+ signals
-  `;
+`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: enhancedPrompt,
-    });
-    
-    return response.text || "Unable to generate analysis at this time.";
-  } catch (error) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
-    return "Error connecting to AI Analyst. Please try again later.";
+    return "Error connecting to AI Analyst (Gemini). Please check your API key and quotas.";
   }
 };

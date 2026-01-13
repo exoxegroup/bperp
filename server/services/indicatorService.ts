@@ -1,4 +1,4 @@
-import { Kline, IndicatorValues, SignalType } from '../types';
+import type { Kline, IndicatorValues, SignalType } from '../types.js';
 
 function calculateSMA(data: number[], period: number): number[] {
   const sma: number[] = [];
@@ -105,86 +105,52 @@ function calculateMACD(closes: number[], fastPeriod = 12, slowPeriod = 26, signa
   return macdValues;
 }
 
-export function calculateAllIndicatorSeries(klineData: Kline[]): IndicatorValues {
-  const closes = klineData.map(k => k.close);
-  const sma10 = calculateSMA(closes, 10);
-  const sma20 = calculateSMA(closes, 20);
-  const sma50 = calculateSMA(closes, 50);
-  const rsi = calculateRSI(closes, 14);
-  const stoch = calculateStoch(klineData, 9, 6);
-  const macd = calculateMACD(closes, 12, 26, 9);
+export function getTechnicalSignal(klines: Kline[]): { signal: SignalType, values: IndicatorValues } {
+  if (klines.length < 50) return { signal: 'NEUTRAL', values: {} };
 
-  const latest = <T>(arr: T[]) => arr.length > 0 ? arr[arr.length - 1] : undefined;
+  const closes = klines.map(k => k.close);
   
-  return {
-    sma10: latest(sma10),
-    sma20: latest(sma20),
-    sma50: latest(sma50),
-    rsi: latest(rsi),
-    stoch: latest(stoch),
-    macd: latest(macd),
-  };
-}
+  const sma10 = calculateSMA(closes, 10).pop();
+  const sma20 = calculateSMA(closes, 20).pop();
+  const sma50 = calculateSMA(closes, 50).pop();
+  const rsi = calculateRSI(closes).pop();
+  const stoch = calculateStoch(klines).pop();
+  const macd = calculateMACD(closes).pop();
 
-export function calculateHistoryForSignal(klineData: Kline[]) {
-    const closes = klineData.map(k => k.close);
-    const macd = calculateMACD(closes, 12, 26, 9);
-    return {
-        macd
-    };
-}
-
-export function getTechnicalSignal(klineData: Kline[]): SignalType {
-  if (!klineData || klineData.length < 50) {
-    return 'NEUTRAL';
+  if (!sma10 || !sma20 || !sma50 || !rsi || !stoch || !macd) {
+    return { signal: 'NEUTRAL', values: {} };
   }
 
-  const closes = klineData.map(k => k.close);
-  const latestClose = closes[closes.length - 1];
-  const indicators = calculateAllIndicatorSeries(klineData);
-  const history = calculateHistoryForSignal(klineData);
+  let bullScore = 0;
+  let bearScore = 0;
 
-  let score = 0;
-
-  // SMA
-  if (indicators.sma10 !== undefined && latestClose > indicators.sma10) score += 1; 
-  else if (indicators.sma10 !== undefined && latestClose < indicators.sma10) score -= 1;
-  
-  if (indicators.sma20 !== undefined && latestClose > indicators.sma20) score += 1; 
-  else if (indicators.sma20 !== undefined && latestClose < indicators.sma20) score -= 1;
-  
-  if (indicators.sma50 !== undefined && latestClose > indicators.sma50) score += 1.5; 
-  else if (indicators.sma50 !== undefined && latestClose < indicators.sma50) score -= 1.5;
+  // SMA Trend
+  if (sma10 > sma20) bullScore++; else bearScore++;
+  if (sma20 > sma50) bullScore++; else bearScore++;
+  if (closes[closes.length - 1] > sma20) bullScore++; else bearScore++;
 
   // RSI
-  if (indicators.rsi !== undefined) {
-    if (indicators.rsi < 30) score += 2; else if (indicators.rsi < 40) score += 1;
-    if (indicators.rsi > 70) score -= 2; else if (indicators.rsi > 60) score -= 1;
-  }
+  if (rsi < 30) bullScore += 2; // Oversold -> Buy
+  else if (rsi > 70) bearScore += 2; // Overbought -> Sell
+  else if (rsi > 50) bullScore++;
+  else bearScore++;
 
-  // STOCH
-  if (indicators.stoch) {
-    if (indicators.stoch.k < 20 && indicators.stoch.k > indicators.stoch.d) score += 2;
-    else if (indicators.stoch.k > 80 && indicators.stoch.k < indicators.stoch.d) score -= 2;
-    else if (indicators.stoch.k > indicators.stoch.d) score += 1;
-    else if (indicators.stoch.k < indicators.stoch.d) score -= 1;
-  }
+  // Stoch
+  if (stoch.k < 20 && stoch.d < 20 && stoch.k > stoch.d) bullScore += 2; // Golden Cross in oversold
+  else if (stoch.k > 80 && stoch.d > 80 && stoch.k < stoch.d) bearScore += 2; // Death Cross in overbought
 
   // MACD
-  // Need current and prev
-  const macdCurrent = indicators.macd;
-  const macdPrev = history.macd.length > 1 ? history.macd[history.macd.length - 2] : undefined;
+  if (macd.histogram > 0 && macd.macdLine > macd.signalLine) bullScore += 2;
+  else if (macd.histogram < 0 && macd.macdLine < macd.signalLine) bearScore += 2;
 
-  if (macdCurrent && macdPrev) {
-    if (macdCurrent.macdLine > macdCurrent.signalLine && macdPrev.macdLine <= macdPrev.signalLine) score += 3;
-    else if (macdCurrent.macdLine < macdCurrent.signalLine && macdPrev.macdLine >= macdPrev.signalLine) score -= 3;
-    else if (macdCurrent.histogram > 0 && macdCurrent.histogram > macdPrev.histogram) score += 1;
-    else if (macdCurrent.histogram < 0 && macdCurrent.histogram < macdPrev.histogram) score -= 1;
-  }
+  let signal: SignalType = 'NEUTRAL';
+  if (bullScore >= 6) signal = 'STRONG_BUY';
+  else if (bullScore >= 4) signal = 'BUY';
+  else if (bearScore >= 6) signal = 'STRONG_SELL';
+  else if (bearScore >= 4) signal = 'SELL';
 
-  if (score >= 8) return 'STRONG_BUY';
-  if (score >= 3) return 'BUY';
-  if (score <= -8) return 'STRONG_SELL';
-  if (score <= -3) return 'SELL';
-  return 'NEUTRAL';
+  return {
+    signal,
+    values: { sma10, sma20, sma50, rsi, stoch, macd }
+  };
 }
