@@ -24,8 +24,13 @@ export async function fetchAllUsdtSymbols() {
         console.error("Failed to fetch symbols from Binance:", error.message);
         if (error.code)
             console.error("Error Code:", error.code);
-        if (error.response)
+        if (error.response) {
             console.error("Response Status:", error.response.status);
+            if (error.response.status === 403 || error.response.status === 451) {
+                console.error("GEO-BLOCKING DETECTED: Binance Futures is not available in this region (e.g., USA).");
+                throw new Error("Binance Futures is not available in this server region (Geo-blocked).");
+            }
+        }
         return [];
     }
 }

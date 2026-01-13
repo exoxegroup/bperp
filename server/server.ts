@@ -99,6 +99,54 @@ const rankSignalData = (symbol: string, data: SignalData): RankedSignal | null =
   return null;
 };
 
+// API: Debug Connectivity
+app.get('/api/debug-connectivity', async (req, res) => {
+    try {
+        const fetch = (await import('node-fetch')).default;
+        const results: any = {};
+        
+        // Test Google (Internet Check)
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const google = await fetch('https://www.google.com', { method: 'HEAD', signal: controller.signal });
+            clearTimeout(timeoutId);
+            results.internet = google.ok ? 'OK' : `Failed: ${google.status}`;
+        } catch (e: any) {
+            results.internet = `Error: ${e.message}`;
+        }
+
+        // Test Binance Futures
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const fapi = await fetch('https://fapi.binance.com/fapi/v1/exchangeInfo', { method: 'HEAD', signal: controller.signal });
+            clearTimeout(timeoutId);
+            results.binanceFutures = fapi.ok ? 'OK' : `Failed: ${fapi.status}`;
+        } catch (e: any) {
+            results.binanceFutures = `Error: ${e.message}`;
+        }
+
+        // Test Binance Spot (Often less restricted)
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const api = await fetch('https://api.binance.com/api/v3/ping', { method: 'GET', signal: controller.signal });
+            clearTimeout(timeoutId);
+            results.binanceSpot = api.ok ? 'OK' : `Failed: ${api.status}`;
+        } catch (e: any) {
+            results.binanceSpot = `Error: ${e.message}`;
+        }
+
+        res.json({
+            region: process.env.RENDER_REGION || 'Unknown',
+            results
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // API: Full Market Scan
 app.get('/api/scan', async (req, res) => {
   try {
@@ -106,7 +154,8 @@ app.get('/api/scan', async (req, res) => {
     
     if (!symbols || symbols.length === 0) {
         console.error("Critical Error: No symbols fetched from Binance. API might be unreachable.");
-        res.status(502).json({ error: "Failed to connect to Binance API. Please check server logs." });
+        // Check if it's likely a geo-block based on empty result but no explicit throw yet (or add try/catch around fetchAll)
+        res.status(502).json({ error: "Failed to connect to Binance API. Server region might be restricted (Geo-blocked)." });
         return;
     }
 
