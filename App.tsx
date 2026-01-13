@@ -16,6 +16,7 @@ const App: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [marketSummary, setMarketSummary] = useState<MarketSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Hydrate from local storage
   useEffect(() => {
@@ -29,11 +30,15 @@ const App: React.FC = () => {
 
   const runScanner = useCallback(async () => {
     setScanning(true);
+    setError(null);
     setProgress({ current: 10, total: 100, symbol: 'Connecting...' });
 
     try {
       const response = await fetch(`${API_BASE_URL}/scan`);
-      if (!response.ok) throw new Error('Scan failed');
+      if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Scan failed with status ${response.status}`);
+      }
       
       const data = await response.json();
       console.log('Scan data received:', data);
@@ -81,8 +86,9 @@ const App: React.FC = () => {
         saveToStorage(newRankedSignals, newMarketSummary, null);
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Scan error:', error);
+      setError(error.message || 'An unexpected error occurred during scan');
     } finally {
       setScanning(false);
       setProgress({ current: 100, total: 100, symbol: 'Complete' });
@@ -109,6 +115,12 @@ const App: React.FC = () => {
           {rankedSignals.length} Active Setups
         </span>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200">
+            <strong>Scan Error:</strong> {error}
+        </div>
+      )}
 
       <SignalGrid signals={rankedSignals} />
     </DashboardLayout>

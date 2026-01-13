@@ -21,7 +21,11 @@ export async function fetchAllUsdtSymbols() {
         return symbols;
     }
     catch (error) {
-        console.error("Failed to fetch symbols:", error);
+        console.error("Failed to fetch symbols from Binance:", error.message);
+        if (error.code)
+            console.error("Error Code:", error.code);
+        if (error.response)
+            console.error("Response Status:", error.response.status);
         return [];
     }
 }

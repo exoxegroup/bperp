@@ -103,6 +103,13 @@ const rankSignalData = (symbol: string, data: SignalData): RankedSignal | null =
 app.get('/api/scan', async (req, res) => {
   try {
     const symbols = await fetchAllUsdtSymbols();
+    
+    if (!symbols || symbols.length === 0) {
+        console.error("Critical Error: No symbols fetched from Binance. API might be unreachable.");
+        res.status(502).json({ error: "Failed to connect to Binance API. Please check server logs." });
+        return;
+    }
+
     // LIMIT FOR DEMO/DEV: First 20 symbols to avoid massive wait times if not batched
     // In production, implement a queue or worker system.
     // For now, let's try 50 symbols.
