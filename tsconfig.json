@@ -28,6 +28,9 @@
   },
   "include": [
     "src/**/*",
+    "client-services/**/*",
+    "components/**/*",
+    "hooks/**/*",
     "*.ts",
     "*.tsx",
     "vite.config.ts"
