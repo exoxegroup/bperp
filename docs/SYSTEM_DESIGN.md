@@ -7,31 +7,34 @@
 ---
 
 ## 1. Architecture Overview
-The system adopts a **Backend-for-Frontend (BFF)** architecture to address security and performance issues.
+The system utilizes a **Client-Side Processing** architecture for market analysis to bypass server-side region restrictions (Geo-blocking), while retaining a backend for AI analysis and static file serving.
 
 ### High-Level Diagram
 ```mermaid
 graph TD
-    Client[React Client] <-->|JSON/HTTPS| Proxy[Node.js Express Server]
-    Proxy <-->|Public API| Binance[Binance Futures API]
-    Proxy <-->|JSON/HTTP| Ollama[Ollama AI Service]
+    Client[React Client] <-->|Public API| Binance[Binance Futures API]
+    Client <-->|JSON/HTTPS| Server[Node.js Express Server]
+    Server <-->|JSON/HTTP| AI_Provider[Ollama / Gemini]
     Client -->|Persist| LocalStorage[Browser Local Storage]
 ```
 
 ### Components
 1.  **Frontend (Client)**:
     *   **Tech**: React 19, Vite, TailwindCSS, GSAP (Animations).
-    *   **Responsibility**: UI rendering, state management, local storage persistence, requesting scans.
+    *   **Responsibility**: 
+        *   Fetching market data directly from Binance.
+        *   Calculating Technical Indicators (SMA, RSI, MACD, etc.).
+        *   Ranking signals.
+        *   UI rendering and state management.
     *   **Design**: Glassmorphism, Modern Dark UI.
     *   **New Feature**: "Offline" mode using cached data from `localStorage`.
 
 2.  **Backend (Server)**:
     *   **Tech**: Node.js, Express.
     *   **Responsibility**:
-        *   **Proxy**: Forwards requests to Binance to hide IP/Origin issues.
-        *   **Compute Engine**: Calculates Technical Indicators (SMA, RSI, MACD) to offload the client.
-        *   **Security Boundary**: Holds `OLLAMA_API_KEY` (if needed) and manages rate limits.
-        *   **Caching**: In-memory cache (Node-Cache) for Binance market data (TTL: 60s).
+        *   **Static File Serving**: Serves the SPA (Single Page Application).
+        *   **AI Gateway**: Proxies requests to Gemini/Ollama for market summary analysis.
+        *   **Security Boundary**: Holds API keys for AI providers.
 
 ---
 
@@ -39,35 +42,16 @@ graph TD
 
 ### 2.1 API Interfaces (Backend <-> Client)
 
-**Endpoint: `GET /api/scan`**
-*   **Description**: Triggers a full market scan.
-*   **Response**:
-    ```json
-    {
-      "timestamp": "2026-01-13T10:00:00Z",
-      "marketSummary": {
-        "bullishCount": 120,
-        "bearishCount": 45,
-        "neutralCount": 335
-      },
-      "signals": [
-        {
-          "symbol": "BTCUSDT",
-          "rank": "A+",
-          "signal": "STRONG_BUY",
-          "ltf": "BUY",
-          "htf": "BUY",
-          "indicators": { "rsi": 45, "macd": "bullish" }
-        }
-      ]
-    }
-    ```
-
 **Endpoint: `POST /api/ai-insight`**
-*   **Input**: Market Summary JSON.
+*   **Input**: Market Summary JSON (calculated by client).
 *   **Response**: `{ "analysis": "Market is currently..." }`
 
-### 2.2 Local Storage Schema
+### 2.2 Client-Side Services
+*   **ScanService**: Orchestrates fetching symbols, klines, and computing ranks.
+*   **BinanceService**: Handles direct API calls to `fapi.binance.com` (Futures) with fallback to `api.binance.com` (Spot).
+*   **IndicatorService**: Pure functions for SMA, EMA, RSI, MACD, Stoch, etc.
+
+### 2.3 Local Storage Schema
 The frontend will store the latest result in `localStorage` under key `crypto-analyst-v1`.
 
 ```typescript
