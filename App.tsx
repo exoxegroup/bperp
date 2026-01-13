@@ -31,32 +31,22 @@ const App: React.FC = () => {
   const runScanner = useCallback(async () => {
     setScanning(true);
     setError(null);
-    setProgress({ current: 10, total: 100, symbol: 'Connecting...' });
+    setProgress({ current: 0, total: 100, symbol: 'Connecting...' });
 
     try {
-      const response = await fetch(`${API_BASE_URL}/scan`);
-      if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `Scan failed with status ${response.status}`);
-      }
+      // Execute Client-Side Scan
+      const data = await scanMarket((current, total) => {
+          setProgress({ 
+            current, 
+            total, 
+            symbol: `Scanning ${current}/${total}` 
+          });
+      });
       
-      const data = await response.json();
       console.log('Scan data received:', data);
 
-      // Map the response correctly from server's MarketSummary format
       const newRankedSignals: RankedSignal[] = data.topSetups || [];
-      const newMarketSummary: MarketSummary = data || {
-          bullishCount: 0, bearishCount: 0, neutralCount: 0, topSetups: []
-      };
-
-      // Sort: A+ first, then A, then B+
-      const rankOrder = { 'A+': 1, 'A': 2, 'B+': 3 };
-      newRankedSignals.sort((a: any, b: any) => {
-          if (rankOrder[a.rank] !== rankOrder[b.rank]) {
-              return rankOrder[a.rank] - rankOrder[b.rank];
-          }
-          return a.symbol.localeCompare(b.symbol);
-      });
+      const newMarketSummary: MarketSummary = data;
 
       setRankedSignals(newRankedSignals);
       setMarketSummary(newMarketSummary);
@@ -64,7 +54,7 @@ const App: React.FC = () => {
 
       // Fetch AI Analysis immediately after scan
       if (newRankedSignals.length > 0) {
-        setProgress({ current: 90, total: 100, symbol: 'Analyzing...' });
+        setProgress({ current: 100, total: 100, symbol: 'Analyzing with AI...' });
         try {
             const aiResponse = await fetch(`${API_BASE_URL}/ai-insight`, {
                 method: 'POST',
